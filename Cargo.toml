@@ -1,0 +1,28 @@
+[package]
+authors = ["Theron Spiegl <theron@spiegl.dev>"]
+name = "wifidirect-legacy-ap"
+version = "0.1.0"
+edition = "2021"
+description = "Loose Rust adaptation of https://github.com/microsoft/Windows-classic-samples/tree/main/Samples/WiFiDirectLegacyAP, written with https://github.com/microsoft/windows-rs."
+license = "BSD-4-Clause"
+license-file = "license.txt"
+homepage = "https://github.com/spieglt/wifidirect-legacy-ap"
+repository = "https://github.com/spieglt/wifidirect-legacy-ap"
+
+[dependencies]
+
+[dependencies.windows]
+version = "0.44.0"
+features = [
+    "Data_Xml_Dom",
+    "Devices_Enumeration",
+    "Devices_WiFiDirect",
+    "Foundation",
+    "Foundation_Collections",
+    "Networking",
+    "Security_Credentials",
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Threading",
+    "Win32_UI_WindowsAndMessaging",
+]
