@@ -12,7 +12,7 @@ use windows::Foundation::{AsyncOperationCompletedHandler, AsyncStatus, TypedEven
 use windows::Security::Credentials::PasswordCredential;
 
 pub trait UI: Clone + Send + 'static {
-    fn output(&self, msg: &str);
+    fn wifidirect_output(&self, msg: &str);
 }
 
 pub struct WlanHostedNetworkHelper<T: UI> {
@@ -28,11 +28,11 @@ impl<T: UI> WlanHostedNetworkHelper<T> {
             let msg = match rx.recv() {
                 Ok(m) => m,
                 Err(e) => {
-                    thread_ui.output(&format!("WiFiDirect thread exiting: {}", e));
+                    thread_ui.wifidirect_output(&format!("WiFiDirect thread exiting: {}", e));
                     break;
                 }
             };
-            thread_ui.output(&msg);
+            thread_ui.wifidirect_output(&msg);
         });
         Ok(WlanHostedNetworkHelper {
             publisher: Mutex::new(publisher),
@@ -47,10 +47,10 @@ impl<T: UI> WlanHostedNetworkHelper<T> {
         let status = publisher.Status()?;
         if status == WiFiDirectAdvertisementPublisherStatus::Started {
             publisher.Stop()?;
-            self.ui.output("Hosted network stopped");
+            self.ui.wifidirect_output("Hosted network stopped");
         } else {
             self.ui
-                .output("Stop called but WiFiDirectAdvertisementPublisher is not running");
+                .wifidirect_output("Stop called but WiFiDirectAdvertisementPublisher is not running");
         }
         Ok(())
     }
@@ -202,7 +202,7 @@ mod tests {
     }
 
     impl UI for Window {
-        fn output(&self, msg: &str) {
+        fn wifidirect_output(&self, msg: &str) {
             println!("val: {}, msg: {}", self.value, msg);
         }
     }

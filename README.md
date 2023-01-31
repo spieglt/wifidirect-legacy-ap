@@ -7,8 +7,8 @@ This is a loose Rust adaptation of [Microsoft's C++ WiFi Direct Legacy AP sample
 Provide `WlanHostedNetworkHelper::new()` with any type that implements UI:
 
 ```
-pub trait UI: Clone + Send {
-    fn output(&self, msg: &str);
+pub trait UI: Clone + Send + 'static {
+    fn wifidirect_output(&self, msg: &str);
 }
 ```
 
@@ -22,11 +22,11 @@ use wifidirect_legacy_ap::{UI, WlanHostedNetworkHelper};
 // Meant to stand in for a Tauri window but can be anything. Must implement Send + Clone.
 #[derive(Clone)]
 struct Window {
-    value: u8, // Value is arbitrary, just demonstrating that we can access struct fields in the output() method
+    value: u8, // Value is arbitrary, just demonstrating that we can access struct fields in the wifidirect_output() method
 }
 
 impl UI for Window {
-    fn output(&self, msg: &str) {
+    fn wifidirect_output(&self, msg: &str) {
         println!("val: {}, msg: {}", self.value, msg);
     }
 }
