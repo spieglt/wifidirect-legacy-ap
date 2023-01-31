@@ -139,7 +139,7 @@ fn start(
             .Status()?;
         match status {
             WiFiDirectAdvertisementPublisherStatus::Created => tx
-                .send(format!("Hosted network created", ssid))
+                .send("Hosted network created".to_string())
                 .expect("Couldn't send on tx"),
             WiFiDirectAdvertisementPublisherStatus::Stopped => tx
                 .send("Hosted network stopped".to_string())
