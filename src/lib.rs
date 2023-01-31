@@ -139,14 +139,14 @@ fn start(
             .Status()?;
         match status {
             WiFiDirectAdvertisementPublisherStatus::Created => tx
-                .send("Publisher created".to_string())
+                .send(format!("Hosted network created", ssid))
                 .expect("Couldn't send on tx"),
             WiFiDirectAdvertisementPublisherStatus::Stopped => tx
-                .send("Publisher stopped".to_string())
+                .send("Hosted network stopped".to_string())
                 .expect("Couldn't send on tx"),
             WiFiDirectAdvertisementPublisherStatus::Started => {
                 start_listener(tx.clone())?;
-                tx.send("Publisher started".to_string())
+                tx.send(format!("Hosted network {} has started", ssid))
                     .expect("Couldn't send on tx");
             }
             WiFiDirectAdvertisementPublisherStatus::Aborted => {
@@ -161,7 +161,7 @@ fn start(
                     WiFiDirectError::Success => "Success",
                     _ => panic!("got bad WiFiDirectError"),
                 };
-                tx.send(format!("Publisher aborted: {}", err))
+                tx.send(format!("Hosted network aborted: {}", err))
                     .expect("Couldn't send on tx");
             }
             _ => panic!("Bad status received in callback."),
