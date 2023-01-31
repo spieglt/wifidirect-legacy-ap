@@ -129,6 +129,7 @@ fn start(
 
     // add status changed handler
     let (tx, rx) = std::sync::mpsc::channel::<String>();
+    let _ssid = ssid.to_string();
     let publisher_status_changed_callback = TypedEventHandler::<
         WiFiDirectAdvertisementPublisher,
         WiFiDirectAdvertisementPublisherStatusChangedEventArgs,
@@ -146,7 +147,7 @@ fn start(
                 .expect("Couldn't send on tx"),
             WiFiDirectAdvertisementPublisherStatus::Started => {
                 start_listener(tx.clone())?;
-                tx.send(format!("Hosted network {} has started", ssid))
+                tx.send(format!("Hosted network {} has started", _ssid))
                     .expect("Couldn't send on tx");
             }
             WiFiDirectAdvertisementPublisherStatus::Aborted => {
