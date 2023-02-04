@@ -11,34 +11,20 @@ use windows::Devices::WiFiDirect::{
 use windows::Foundation::{AsyncOperationCompletedHandler, AsyncStatus, TypedEventHandler};
 use windows::Security::Credentials::PasswordCredential;
 
-pub trait UI: Clone + Send + 'static {
-    fn wifidirect_output(&self, msg: &str);
-}
-
-pub struct WlanHostedNetworkHelper<T: UI> {
+pub struct WlanHostedNetworkHelper {
     publisher: Mutex<WiFiDirectAdvertisementPublisher>,
-    ui: T,
+    tx: Sender<String>,
 }
 
-impl<T: UI> WlanHostedNetworkHelper<T> {
-    pub fn new(ssid: &str, password: &str, ui: T) -> Result<Self> {
-        let (publisher, rx) = start(ssid, password)?;
-        let thread_ui = ui.clone();
-        std::thread::spawn(move || loop {
-            let msg = match rx.recv() {
-                Ok(m) => m,
-                Err(e) => {
-                    thread_ui.wifidirect_output(&format!("WiFiDirect thread exiting: {}", e));
-                    break;
-                }
-            };
-            thread_ui.wifidirect_output(&msg);
-        });
+impl WlanHostedNetworkHelper {
+    pub fn new(ssid: &str, password: &str, tx: Sender<String>) -> Result<Self> {
+        let publisher = start(ssid, password, tx.clone())?;
         Ok(WlanHostedNetworkHelper {
             publisher: Mutex::new(publisher),
-            ui: ui,
+            tx: tx,
         })
     }
+
     pub fn stop(&self) -> Result<()> {
         let publisher = self
             .publisher
@@ -47,10 +33,13 @@ impl<T: UI> WlanHostedNetworkHelper<T> {
         let status = publisher.Status()?;
         if status == WiFiDirectAdvertisementPublisherStatus::Started {
             publisher.Stop()?;
-            self.ui.wifidirect_output("Hosted network stopped");
+            self.tx
+                .send("Hosted network stopped".to_string())
+                .expect("Could not send on channel.");
         } else {
-            self.ui
-                .wifidirect_output("Stop called but WiFiDirectAdvertisementPublisher is not running");
+            self.tx
+                .send("Stop called but WiFiDirectAdvertisementPublisher is not running".to_string())
+                .expect("Could not send on channel.");
         }
         Ok(())
     }
@@ -124,11 +113,11 @@ fn start_listener(tx: Sender<String>) -> Result<()> {
 fn start(
     ssid: &str,
     password: &str,
-) -> Result<(WiFiDirectAdvertisementPublisher, Receiver<String>)> {
+    tx: Sender<String>,
+) -> Result<WiFiDirectAdvertisementPublisher> {
     let publisher = WiFiDirectAdvertisementPublisher::new()?;
 
     // add status changed handler
-    let (tx, rx) = std::sync::mpsc::channel::<String>();
     let _ssid = ssid.to_string();
     let publisher_status_changed_callback = TypedEventHandler::<
         WiFiDirectAdvertisementPublisher,
@@ -189,36 +178,37 @@ fn start(
     // Start the advertisement, which will create an access point that other peers can connect to
     publisher.Start()?;
 
-    Ok((publisher, rx))
+    Ok(publisher)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{WlanHostedNetworkHelper, UI};
-
-    // Meant to stand in for a Tauri window but can be anything. Must implement Send + Clone.
-    #[derive(Clone)]
-    struct Window {
-        value: u8, // Value is arbitrary, just demonstrating that we can access struct fields in the output() method
-    }
-
-    impl UI for Window {
-        fn wifidirect_output(&self, msg: &str) {
-            println!("val: {}, msg: {}", self.value, msg);
-        }
-    }
+    use crate::WlanHostedNetworkHelper;
+    use std::sync::mpsc;
+    use std::thread::spawn;
 
     // run with `cargo test -- --nocapture` to see output
     #[test]
     fn run_hosted_network() {
-        // Make a struct that implements UI. Use it and our SSID/password to create and start a hosted network (soft AP, hotspot, whatever you want to call it).
-        let window = Window { value: 32 };
+        // Make channels to receive messages from Windows Runtime
+        let (tx, rx) = mpsc::channel::<String>();
         let wlan_hosted_network_helper =
-            WlanHostedNetworkHelper::new("WiFiDirectTestNetwork", "TestingThisLibrary", window)
+            WlanHostedNetworkHelper::new("WiFiDirectTestNetwork", "TestingThisLibrary", tx)
                 .unwrap();
 
+        spawn(move || loop {
+            let msg = match rx.recv() {
+                Ok(m) => m,
+                Err(e) => {
+                    println!("WiFiDirect thread exiting: {}", e);
+                    break;
+                }
+            };
+            println!("{}", msg);
+        });
+
         // Use the hosted network
-        std::thread::sleep(std::time::Duration::from_secs(5));
+        std::thread::sleep(std::time::Duration::from_secs(20));
 
         // Stop it when done
         wlan_hosted_network_helper.stop().expect("Error in stop()");

@@ -1,44 +1,37 @@
 # WiFiDirect Legacy AP (for Windows)
 
-This is a loose Rust adaptation of [Microsoft's C++ WiFi Direct Legacy AP sample code](https://github.com/microsoft/Windows-classic-samples/tree/main/Samples/WiFiDirectLegacyAP), adapted for my purposes with [Flying Carpet](https://flyingcarpet.spiegl.dev), and written with [Microsoft's Rust bindings for the Windows API](https://github.com/microsoft/windows-rs). It is a library exposing one struct, `WlanHostedNetworkHelper`, and one trait, `UI`.
+This is a loose Rust adaptation of [Microsoft's C++ WiFi Direct Legacy AP sample code](https://github.com/microsoft/Windows-classic-samples/tree/main/Samples/WiFiDirectLegacyAP), adapted for my purposes with [Flying Carpet](https://flyingcarpet.spiegl.dev), and written with [Microsoft's Rust bindings for the Windows API](https://github.com/microsoft/windows-rs). It is a library exposing one struct, `WlanHostedNetworkHelper`.
 
-## Use
 
-Provide `WlanHostedNetworkHelper::new()` with any type that implements UI:
+## Example Use
 
-```
-pub trait UI: Clone + Send + 'static {
-    fn wifidirect_output(&self, msg: &str);
-}
-```
-
-The `output()` method will be called whenever the Windows Runtime sends any messages about the hosted network.
-
-## Example
+Provide `WlanHostedNetworkHelper::new()` with an SSID, password, and a `Sender` channel that will be used to write messages back to your code from the Windows Runtime. Keep the returned hotspot in scope for as long as you need it.
 
 ```
-use wifidirect_legacy_ap::{UI, WlanHostedNetworkHelper};
+use std::sync::mpsc;
+use std::thread::spawn;
+use crate::WlanHostedNetworkHelper;
 
-// Meant to stand in for a Tauri window but can be anything. Must implement Send + Clone.
-#[derive(Clone)]
-struct Window {
-    value: u8, // Value is arbitrary, just demonstrating that we can access struct fields in the wifidirect_output() method
-}
-
-impl UI for Window {
-    fn wifidirect_output(&self, msg: &str) {
-        println!("val: {}, msg: {}", self.value, msg);
-    }
-}
-
-fn main() {
-    // Make a struct that implements UI. Use it and our SSID/password to create and start a hosted network (soft AP, hotspot, whatever you want to call it).
-    let window = Window { value: 32 };
+fn run_hosted_network() {
+    // Make channels to receive messages from Windows Runtime
+    let (tx, rx) = mpsc::channel::<String>();
     let wlan_hosted_network_helper =
-        WlanHostedNetworkHelper::new("WiFiDirectTestNetwork", "TestingThisLibrary", window).unwrap();
+        WlanHostedNetworkHelper::new("WiFiDirectTestNetwork", "TestingThisLibrary", tx)
+            .unwrap();
+
+    spawn(move || loop {
+        let msg = match rx.recv() {
+            Ok(m) => m,
+            Err(e) => {
+                println!("WiFiDirect thread exiting: {}", e);
+                break;
+            }
+        };
+        println!("{}", msg);
+    });
 
     // Use the hosted network
-    std::thread::sleep(std::time::Duration::from_secs(5));
+    std::thread::sleep(std::time::Duration::from_secs(20));
 
     // Stop it when done
     wlan_hosted_network_helper.stop().expect("Error in stop()");
