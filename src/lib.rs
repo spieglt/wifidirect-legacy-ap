@@ -13,7 +13,7 @@ use windows::Security::Credentials::PasswordCredential;
 
 pub struct WlanHostedNetworkHelper {
     publisher: Mutex<WiFiDirectAdvertisementPublisher>,
-    tx: Sender<String>,
+    tx: Mutex<Sender<String>>, // mutex necessary for integration with tokio
 }
 
 impl WlanHostedNetworkHelper {
@@ -21,7 +21,7 @@ impl WlanHostedNetworkHelper {
         let publisher = start(ssid, password, tx.clone())?;
         Ok(WlanHostedNetworkHelper {
             publisher: Mutex::new(publisher),
-            tx: tx,
+            tx: Mutex::new(tx),
         })
     }
 
@@ -29,15 +29,19 @@ impl WlanHostedNetworkHelper {
         let publisher = self
             .publisher
             .lock()
-            .expect("Couldn't lock publisher mutex");
+            .expect("Couldn't lock publisher mutex.");
         let status = publisher.Status()?;
         if status == WiFiDirectAdvertisementPublisherStatus::Started {
             publisher.Stop()?;
-            self.tx
-                .send("Hosted network stopped".to_string())
-                .expect("Could not send on channel.");
+            // self.tx
+            //     .lock()
+            //     .expect("Couldn't lock sender mutex.")
+            //     .send("Hosted network stopped".to_string())
+            //     .expect("Could not send on channel.");
         } else {
             self.tx
+                .lock()
+                .expect("Couldn't lock sender mutex.")
                 .send("Stop called but WiFiDirectAdvertisementPublisher is not running".to_string())
                 .expect("Could not send on channel.");
         }
@@ -208,7 +212,7 @@ mod tests {
         });
 
         // Use the hosted network
-        std::thread::sleep(std::time::Duration::from_secs(20));
+        std::thread::sleep(std::time::Duration::from_secs(10));
 
         // Stop it when done
         wlan_hosted_network_helper.stop().expect("Error in stop()");
