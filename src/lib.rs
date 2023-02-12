@@ -13,15 +13,15 @@ use windows::Security::Credentials::PasswordCredential;
 
 pub struct WlanHostedNetworkHelper {
     publisher: Mutex<WiFiDirectAdvertisementPublisher>,
-    tx: Mutex<Sender<String>>, // mutex necessary for integration with tokio
+    message_tx: Mutex<Sender<String>>, // mutex necessary for integration with tokio
 }
 
 impl WlanHostedNetworkHelper {
-    pub fn new(ssid: &str, password: &str, tx: Sender<String>) -> Result<Self> {
-        let publisher = start(ssid, password, tx.clone())?;
+    pub fn new(ssid: &str, password: &str, message_tx: Sender<String>, success_tx: Sender<bool>) -> Result<Self> {
+        let publisher = start(ssid, password, message_tx.clone(), success_tx.clone())?;
         Ok(WlanHostedNetworkHelper {
             publisher: Mutex::new(publisher),
-            tx: Mutex::new(tx),
+            message_tx: Mutex::new(message_tx),
         })
     }
 
@@ -39,7 +39,7 @@ impl WlanHostedNetworkHelper {
             //     .send("Hosted network stopped".to_string())
             //     .expect("Could not send on channel.");
         } else {
-            self.tx
+            self.message_tx
                 .lock()
                 .expect("Couldn't lock sender mutex.")
                 .send("Stop called but WiFiDirectAdvertisementPublisher is not running".to_string())
@@ -117,7 +117,8 @@ fn start_listener(tx: Sender<String>) -> Result<()> {
 fn start(
     ssid: &str,
     password: &str,
-    tx: Sender<String>,
+    message_tx: Sender<String>,
+    success_tx: Sender<bool>,
 ) -> Result<WiFiDirectAdvertisementPublisher> {
     let publisher = WiFiDirectAdvertisementPublisher::new()?;
 
@@ -132,16 +133,18 @@ fn start(
             .expect("args == None in status change callback")
             .Status()?;
         match status {
-            WiFiDirectAdvertisementPublisherStatus::Created => tx
+            WiFiDirectAdvertisementPublisherStatus::Created => message_tx
                 .send("Hosted network created".to_string())
                 .expect("Couldn't send on tx"),
-            WiFiDirectAdvertisementPublisherStatus::Stopped => tx
+            WiFiDirectAdvertisementPublisherStatus::Stopped => message_tx
                 .send("Hosted network stopped".to_string())
                 .expect("Couldn't send on tx"),
             WiFiDirectAdvertisementPublisherStatus::Started => {
-                start_listener(tx.clone())?;
-                tx.send(format!("Hosted network {} has started", _ssid))
+                start_listener(message_tx.clone())?;
+                message_tx.send(format!("Hosted network {} has started", _ssid))
                     .expect("Couldn't send on tx");
+                // tell caller we started hotspot
+                success_tx.send(true).expect("Couldn't send hotspot creation success");
             }
             WiFiDirectAdvertisementPublisherStatus::Aborted => {
                 let err = match args
@@ -152,11 +155,13 @@ fn start(
                 {
                     WiFiDirectError::RadioNotAvailable => "Radio not available",
                     WiFiDirectError::ResourceInUse => "Resource in use",
-                    WiFiDirectError::Success => "Success",
+                    WiFiDirectError::Success => "No WiFi Direct-capable card or other error",
                     _ => panic!("got bad WiFiDirectError"),
                 };
-                tx.send(format!("Hosted network aborted: {}", err))
+                message_tx.send(format!("Hosted network aborted: {}", err))
                     .expect("Couldn't send on tx");
+                // tell caller we failed to start hotspot
+                success_tx.send(false).expect("Couldn't send hotspot creation failure");
             }
             _ => panic!("Bad status received in callback."),
         }
@@ -195,13 +200,15 @@ mod tests {
     #[test]
     fn run_hosted_network() {
         // Make channels to receive messages from Windows Runtime
-        let (tx, rx) = mpsc::channel::<String>();
+        let (message_tx, message_rx) = mpsc::channel::<String>();
+        let (success_tx, success_rx) = mpsc::channel::<bool>();
         let wlan_hosted_network_helper =
-            WlanHostedNetworkHelper::new("WiFiDirectTestNetwork", "TestingThisLibrary", tx)
+            WlanHostedNetworkHelper::new("WiFiDirectTestNetwork", "TestingThisLibrary", message_tx, success_tx)
                 .unwrap();
 
+        // Listen for messages in a thread that will exit when the hotspot is done and the sender closes
         spawn(move || loop {
-            let msg = match rx.recv() {
+            let msg = match message_rx.recv() {
                 Ok(m) => m,
                 Err(e) => {
                     println!("WiFiDirect thread exiting: {}", e);
@@ -210,6 +217,12 @@ mod tests {
             };
             println!("{}", msg);
         });
+
+        // Wait to see whether we were able to start the hotspot
+        let started = success_rx.recv().unwrap();
+        if !started {
+            panic!("Failed to start hotspot");
+        }
 
         // Use the hosted network
         std::thread::sleep(std::time::Duration::from_secs(10));

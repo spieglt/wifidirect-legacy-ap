@@ -1,7 +1,7 @@
 [package]
 authors = ["Theron Spiegl <theron@spiegl.dev>"]
 name = "wifidirect-legacy-ap"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2021"
 description = "Loose Rust adaptation of https://github.com/microsoft/Windows-classic-samples/tree/main/Samples/WiFiDirectLegacyAP, written with https://github.com/microsoft/windows-rs."
 license = "BSD-4-Clause"
