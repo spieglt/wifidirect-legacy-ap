@@ -17,7 +17,12 @@ pub struct WlanHostedNetworkHelper {
 }
 
 impl WlanHostedNetworkHelper {
-    pub fn new(ssid: &str, password: &str, message_tx: Sender<String>, success_tx: Sender<bool>) -> Result<Self> {
+    pub fn new(
+        ssid: &str,
+        password: &str,
+        message_tx: Sender<String>,
+        success_tx: Sender<bool>,
+    ) -> Result<Self> {
         let publisher = start(ssid, password, message_tx.clone(), success_tx.clone())?;
         Ok(WlanHostedNetworkHelper {
             publisher: Mutex::new(publisher),
@@ -141,10 +146,13 @@ fn start(
                 .expect("Couldn't send on tx"),
             WiFiDirectAdvertisementPublisherStatus::Started => {
                 start_listener(message_tx.clone())?;
-                message_tx.send(format!("Hosted network {} has started", _ssid))
+                message_tx
+                    .send(format!("Hosted network {} has started", _ssid))
                     .expect("Couldn't send on tx");
                 // tell caller we started hotspot
-                success_tx.send(true).expect("Couldn't send hotspot creation success");
+                success_tx
+                    .send(true)
+                    .expect("Couldn't send hotspot creation success");
             }
             WiFiDirectAdvertisementPublisherStatus::Aborted => {
                 let err = match args
@@ -158,10 +166,13 @@ fn start(
                     WiFiDirectError::Success => "No WiFi Direct-capable card or other error",
                     _ => panic!("got bad WiFiDirectError"),
                 };
-                message_tx.send(format!("Hosted network aborted: {}", err))
+                message_tx
+                    .send(format!("Hosted network aborted: {}", err))
                     .expect("Couldn't send on tx");
                 // tell caller we failed to start hotspot
-                success_tx.send(false).expect("Couldn't send hotspot creation failure");
+                success_tx
+                    .send(false)
+                    .expect("Couldn't send hotspot creation failure");
             }
             _ => panic!("Bad status received in callback."),
         }
@@ -202,9 +213,13 @@ mod tests {
         // Make channels to receive messages from Windows Runtime
         let (message_tx, message_rx) = mpsc::channel::<String>();
         let (success_tx, success_rx) = mpsc::channel::<bool>();
-        let wlan_hosted_network_helper =
-            WlanHostedNetworkHelper::new("WiFiDirectTestNetwork", "TestingThisLibrary", message_tx, success_tx)
-                .unwrap();
+        let wlan_hosted_network_helper = WlanHostedNetworkHelper::new(
+            "WiFiDirectTestNetwork",
+            "TestingThisLibrary",
+            message_tx,
+            success_tx,
+        )
+        .unwrap();
 
         // Listen for messages in a thread that will exit when the hotspot is done and the sender closes
         spawn(move || loop {
